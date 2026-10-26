@@ -24,6 +24,8 @@
 
 ## 开始 M0 施工
 
+M0 已完成；此模板保留用于回顾验收范围或重建，正常接续使用下面的 M1 模板。
+
 ```text
 请按 AGENTS.md、HANDOFF.md 和 docs/development.md 完成 M0。
 先检查工作区与架构契约，建立 pyproject、src layout、依赖锁文件。
@@ -31,6 +33,16 @@
 不要提前扩展完整认证或保活模块，不创建大量 NotImplementedError 占位代码。
 配置错误、CLI 返回码和凭据不泄漏需要测试；不连接真实校园网。
 执行实际检查，报告命令与退出码，并更新 HANDOFF.md。
+```
+
+## 继续 M1 协议
+
+```text
+读取 AGENTS.md、HANDOFF.md 和 docs/development.md，核对已实现的 M0 契约。
+完成 M1：移植 references/GoAuthing 的纯编码、登录登出参数与 JSONP 解析。
+保留 GPLv3 来源；参考文件只读。补齐 Go/Python 完整报文对拍和畸形响应测试。
+网络、双栈在线检查与真实校园网登录留给后续阶段，不提前写保活占位代码。
+执行实际检查，更新 HANDOFF.md，报告哪些行为仍需校内验证。
 ```
 
 ## 按文件范围并行实施

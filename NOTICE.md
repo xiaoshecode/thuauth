@@ -8,6 +8,6 @@
 - 原作者与贡献者：保留上游 README、源码和 Git 项目中的声明；本仓库不将其归为自己的原创代码。
 - 上游许可证：GNU General Public License version 3，完整文本见根目录 LICENSE 与 references/GoAuthing/LICENSE。
 
-2026-10-26：导入上述提交的 23 个源文件，内容不修改；新增 thuauth 架构、实施计划、Codex 项目约定、提示词、交接文件和来源清单。当前没有 Python 认证实现。
+2026-10-26：导入上述提交的 23 个源文件，内容不修改；新增 thuauth 架构、实施计划、Codex 项目约定、提示词、交接文件和来源清单。随后新增 M0 Python 包、本地配置校验与 CLI 及对应测试。当前没有 Python 认证或流量实现。
 
 本仓库按随附 GPLv3 许可发布；后续移植应保留来源并标明修改。新建仓库或翻译为 Python 不改变原代码适用的许可条件。许可证文本中 Free Software Foundation 的版权声明属于许可证文本，不是 GoAuthing 源码的作者声明。

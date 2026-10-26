@@ -24,3 +24,6 @@ state/
 .codex/sessions/
 .codex/logs/
 .codex-log/
+.tools/
+.uv-cache/
+.thuauth-*.tmp

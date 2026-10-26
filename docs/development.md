@@ -1,10 +1,10 @@
 # thuauth 实施与协作
 
-本计划把开发分为可独立验收的阶段，并用有限数量的子 agent 处理互不冲突的工作。架构见 [architecture.md](architecture.md)。当前进度是设计与源码评审完成后的准备阶段，程序实现尚未开始。
+本计划把开发分为可独立验收的阶段，并用有限数量的子 agent 处理互不冲突的工作。架构见 [architecture.md](architecture.md)，实际进度与检查结果见 [HANDOFF.md](../HANDOFF.md)。M0 已建立包、配置与本地 CLI；接下来实施 M1 协议。
 
-## 本轮评审结论
+## 实现前的架构评审
 
-本轮使用两个只读子 agent 分别审查协议移植和运行时故障路径，主会话结合源文件与官方文档整合。没有执行校园网认证或 Python 程序测试。
+以下结论来自 M0 实现前的两个只读子 agent，分别审查协议移植和运行时故障路径，由主会话结合源码整合。该次架构评审没有执行程序；M0 现已实现并运行 Python 检查，实际结果见 HANDOFF.md。
 
 | 发现 | 依据或触发条件 | 设计处理 |
 | --- | --- | --- |
@@ -24,7 +24,7 @@
 
 | 阶段 | 交付 | 完成标准 |
 | --- | --- | --- |
-| M0 工程与契约 | pyproject、锁文件、模型、配置、异常、测试入口 | CLI help/config check 可用；配置失败测试通过 |
+| M0 工程与契约（已完成） | pyproject、锁文件、模型、配置、异常、测试入口 | CLI help/init/config check 可用；配置失败与原子写入测试通过 |
 | M1 协议 | coding、srun、合成 fixtures | Go 向量、登录登出参数、JSONP、错误响应测试通过 |
 | M2 认证客户端 | HTTP 会话、AuthService、login/logout/status/doctor | 本地假服务器通过双栈、超时、账号冲突等测试；无需真实密码 |
 | M3 保活流量 | daemon、traffic、limiter、统计与退出 | 本地持续流测试、速率预算、恢复、取消、进程锁通过 |
@@ -34,7 +34,7 @@
 
 ## 多 agent 分工
 
-M0 由主 agent 完成，锁定共享数据模型、错误语义与限速单位后再并行。共享文件包括 pyproject.toml、uv.lock、models.py、config.py、errors.py、app.py，只由主 agent 修改。
+M0 的共享模型与实现由主 agent 负责，独立测试 agent 可在契约明确后编写 CLI 测试，reviewer 只读检查。锁定协议与流量接口后，再并行实施下表中的模块。共享文件包括 pyproject.toml、uv.lock、models.py、config.py、errors.py、app.py，只由主 agent 修改。
 
 | 角色 | 允许修改 | 任务与产出 |
 | --- | --- | --- |
@@ -76,7 +76,7 @@ CI 不访问 auth4/auth6，不使用真实账号，也不连续下载公共镜�
 
 ## 验证命令
 
-以下命令待 M0 创建包和依赖后可执行；当前文档阶段没有运行这些检查。
+M0 创建的包与 dev 依赖已支持以下命令。Windows 本次验证所用 uv 位于本地忽略目录 `.tools/bin/uv.exe`，未加入全局 PATH；安装了 uv 的环境可直接执行标准命令。
 
 ```powershell
 uv sync --locked --group dev
@@ -96,14 +96,14 @@ uv run pytest -q
 
 ```text
 请阅读 AGENTS.md、HANDOFF.md、docs/architecture.md、docs/development.md。
-完成 M0，交付可运行的最小包骨架、配置校验和对应测试。
+完成 M1，移植纯协议编码、登录登出参数与 JSONP 解析，并补齐 Go/Python 对拍。
 先检查实际工作区状态，再按文档实施；关键设计冲突要指出。
 不要连接校园网提交凭据，不要启动公网 bulk 下载。
 对缺陷先写可复现测试；完成后实际运行受影响检查。
 报告变更文件、命令和退出码，以及尚未验证的部分。
 ```
 
-M0 完成后需要并行时使用：
+后续接口基线已具备、协议与流量任务可独立验收时使用（M0 完成不表示这些依赖已全部就绪）：
 
 ```text
 以当前已提交的接口为基线，调用两个子 agent 并行实现协议与流量模块。

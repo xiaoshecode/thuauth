@@ -1,8 +1,26 @@
 # thuauth
 
-使用 Codex 协作开发的个人清华校园网认证与保活工具，计划采用 Python 3.12+、asyncio 和 aiohttp。支持本地 JSON 凭据、IPv4/IPv6、自动重登、指定网站访问及可配置下载流量。
+使用 Codex 协作开发的个人清华校园网认证与保活工具，采用 Python 3.12+。目标功能包括本地 JSON 凭据、IPv4/IPv6、自动重登、指定网站访问及可配置下载流量，网络层计划采用 asyncio 和 aiohttp。
 
-**当前阶段：设计与参考材料已就绪，尚未实现 Python 应用。** 下次可以继续审查架构，或直接从 M0 建立可运行骨架。实际进度以 [HANDOFF.md](HANDOFF.md) 为准。
+**当前阶段：M0 已完成，本地配置 CLI 可运行。** 认证与保活尚未实现，下一阶段为 M1 协议。实际进度以 [HANDOFF.md](HANDOFF.md) 为准。
+
+## 运行 M0
+
+准备 uv 与 Python 3.12+，在项目目录执行：
+
+```powershell
+uv sync --locked --group dev
+uv run thuauth --help
+uv run thuauth config check -c config.example.json
+uv run thuauth init
+uv run thuauth config check --require-credentials
+```
+
+本机本轮安装的 uv 位于 `.tools/bin/uv.exe`，因此也可将上面的 `uv` 替换为 `./.tools/bin/uv.exe`；该目录和 `.venv` 不提交 Git，克隆到其他机器后需自行准备环境。
+
+`init` 在交互终端隐藏输入密码并确认，默认保存在 Windows `%APPDATA%/thuauth/config.json` 或 Linux XDG 用户配置目录。密码按需求以明文保存，文件权限限制为当前用户。需要其他路径可加 `-c`；只有显式 `init --force` 才覆盖已有配置，并将其他选项重置到默认值。
+
+`config check` 仅校验本地结构；`--require-credentials` 额外检查账号密码已填写。两者均不连接校园网，不能证明密码正确。尚未提供 login/logout/status/keep/doctor 命令。
 
 ## 从 Codex 继续
 
@@ -14,7 +32,7 @@
 
 ```text
 请读取 AGENTS.md、HANDOFF.md 和 docs/prompts.md，核对实际工作区。
-沿用已确认需求，先处理阻碍实现的架构问题，再完成 M0。
+沿用已确认需求与 M0 配置契约，先处理阻碍实现的架构问题，再完成 M1 协议。
 按 docs/development.md 运行真实检查，更新 HANDOFF.md 后报告结果。
 ```
 
@@ -46,4 +64,4 @@
 
 仓库附有 [GPLv3 许可证](LICENSE) 和 [来源说明](NOTICE.md)。参考快照来自 [z4yx/GoAuthing](https://github.com/z4yx/GoAuthing) 的 `3730e252ca11e6abbd055d7850c417c5751c1efa`，保留原文件内容与许可。
 
-快照不是 Git submodule，克隆本仓库即可获得全部参考材料。快照里的 GitHub Actions 位于 references/ 下，不会作为本项目的工作流自动运行。Python 实现放在未来的 src/thuauth/，不直接修改参考快照。
+快照不是 Git submodule，克隆本仓库即可获得全部参考材料。快照里的 GitHub Actions 位于 references/ 下，不会作为本项目的工作流自动运行。Python 实现位于 src/thuauth/，不直接修改参考快照。

@@ -1,0 +1,52 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "thuauth"
+version = "0.1.0"
+description = "Personal Tsinghua campus authentication and keepalive client"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "GPL-3.0-only"
+license-files = ["LICENSE", "NOTICE.md"]
+dependencies = ["aiohttp>=3.12,<4", "filelock>=3.18,<4"]
+
+[project.scripts]
+thuauth = "thuauth.cli:main"
+
+[dependency-groups]
+dev = [
+    "mypy>=1.15,<2",
+    "pytest>=8,<10",
+    "pytest-asyncio>=1,<2",
+    "ruff>=0.11,<1",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/thuauth"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src", "/tests", "/pyproject.toml", "/config.example.json",
+    "/README.md", "/LICENSE", "/NOTICE.md",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = ["references", "docs/history", ".tools", ".uv-cache"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src/thuauth"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-config --strict-markers"
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "function"

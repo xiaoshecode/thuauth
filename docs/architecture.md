@@ -34,7 +34,7 @@ aiohttp 的 TCPConnector 提供 family 参数，因此不使用全局 socket.get
 
 ## 目录与职责
 
-以下结构同时列出当前交接材料与计划中的 Python 实现。实际完成状态见 HANDOFF.md；目前已有文档、配置示例和完整参考源码，尚无 Python 应用。
+以下结构同时列出当前实现与后续计划。实际完成状态见 HANDOFF.md；M0 已实现 config、models、errors、cli 和包入口，认证、HTTP 与保活模块尚未实现。
 
 ```text
 thuauth/
@@ -90,6 +90,8 @@ thuauth/
 
 不为每个小类创建文件。traffic 初期容纳 probe、bulk 与统计，只有复杂度增长后才拆包。依赖在 app 显式构造，无全局 Session、可变配置或隐式单例。
 
+M0 的 CLI 直接调用本地配置模块；app 和异步资源生命周期在 M2 按需引入，避免为当前几个本地命令增加空编排层。尚不创建认证/状态机的占位类。Credentials 和 Target 为当前实际共用的数据模型。
+
 ## 核心接口
 
 只在稳定边界使用类型接口，初版不预制通用插件框架。
@@ -99,23 +101,25 @@ thuauth/
 def xencode(data: bytes, key: bytes) -> bytes: ...
 def srbx1_encode(data: bytes) -> str: ...
 
+
 # 返回状态观测而非 bool，网络失败不能被折叠成离线
 class SrunClient:
     async def discover(self) -> AccessContext: ...
     async def status(self, access: AccessContext) -> OnlineObservation: ...
-    async def login(self, credentials: Credentials,
-                    access: AccessContext) -> AuthReply: ...
-    async def logout(self, username: str,
-                     access: AccessContext) -> AuthReply: ...
+    async def login(self, credentials: Credentials, access: AccessContext) -> AuthReply: ...
+    async def logout(self, username: str, access: AccessContext) -> AuthReply: ...
+
 
 class AuthService:
     async def status_all(self) -> StatusReport: ...
     async def ensure_online(self, family: IPFamily) -> AuthOutcome: ...
     async def logout_all(self) -> LogoutReport: ...
 
+
 class TrafficRunner:
     async def run(self) -> None: ...
     def snapshot(self) -> TrafficSnapshot: ...
+
 
 class Daemon:
     async def run(self, stop: asyncio.Event) -> None: ...
@@ -245,6 +249,21 @@ bulk target 结构为 `{"url": "https://your-host/path/file.bin", "family": "ipv
 拒绝未知键、错误类型、非有限数值、重复 JSON 键、负数、过大并发与非法 URL，并报告字段路径。缺失可选字段使用默认值；凭据校验按命令区分。新增可选字段保持旧配置可读，破坏性变更通过 schema_version 显式迁移，未知新版本报错。
 
 init 交互式创建配置，keep 在无配置或非交互环境中直接给出明确错误，不在后台等待输入。写入使用同目录临时文件和原子替换；Unix 限制为用户可读写，Windows 放在用户目录并检查适用 ACL，不宣称 chmod(0600) 能建立 Windows ACL。真实配置默认位于仓库外。
+
+M0 已明确的行为如下：
+
+- `config check` 默认只检查结构，允许尚未填写凭据的示例；`--require-credentials` 额外要求非空账号密码，不验证学校侧是否接受。
+- `init` 要求 stdin、stderr 均为终端；使用 getpass 两次确认密码，无法隐藏输入时中止。只清理学号首尾空白，密码的空格和 Unicode 原样保存。
+- 默认不覆盖已有文件；以同目录临时文件加原子硬链接完成首次发布，避免并发创建时误覆盖。不支持硬链接的文件系统明确报错。`init --force` 用原子替换重置全部选项到默认值并保存新凭据，拒绝目标符号链接。
+- Windows 对空临时文件调用系统 whoami/icacls 设置当前用户的私有 ACL，成功后才写入凭据；Unix 临时文件模式为 0600。不会修改已有父目录权限。
+- `-c/--config` 可放在根命令或子命令后；M0 没有业务布尔覆盖选项。JSON 中显式 false 与空列表不会被默认值覆盖。
+- 配置最多 1 MiB，接受 UTF-8 BOM；错误包含已知字段路径或 JSON 行列，未知字段名统一显示 `<unknown>`，不回显原文与非法值。重复键、非有限数值、超深嵌套会报配置错误。命令行用法错误同样不回显错误参数。
+- 临时文件清理失败返回脱敏错误，保留原始写入失败原因；若配置已经发布则明确说明已写入，并提示检查配置目录内的 `.thuauth-*.tmp`。文件在写入任何凭据前已限制权限。
+- schema_version 仅接受整数 1；auth 至少启用一栈；ac_id 为正数字符串或 null。health 间隔为 1–3600 秒，probe 间隔为 1–86400 秒。
+- probe 响应上限 1–1048576 字节；bulk 的块上限 1–1048576 字节且不超过单次响应上限，单次响应最大 1 GiB。总 worker 数不超过 32；下载目标速率为 0.01–1048576 MiB/min。
+- 各类目标最多 64 项，仅允许不含内嵌账号密码或 fragment 的 HTTP(S) URL。bulk 开启时，每个有效 worker 地址族都需要相应目标；禁用地址族的 worker 配置保留但不激活。probe 空目标列表表示不探测。
+
+上述数值上限用于约束无效配置，不表示程序已具备对应流量能力。认证与流量行为仍需在 M1–M3 实现和验证。
 
 ## 实例互斥与诊断
 
