@@ -1,0 +1,7 @@
+* text=auto eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.toml text eol=lf
+*.py text eol=lf
+references/GoAuthing/** -text
+docs/history/2026-10-26-before-codex/** -text

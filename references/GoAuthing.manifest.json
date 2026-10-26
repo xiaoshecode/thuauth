@@ -1,0 +1,123 @@
+{
+  "repository": "https://github.com/z4yx/GoAuthing",
+  "commit": "3730e252ca11e6abbd055d7850c417c5751c1efa",
+  "snapshot_date": "2026-10-26",
+  "format": "git archive with core.autocrlf=false; source blob identity verified",
+  "files": [
+    {
+      "path": ".github/workflows/go.yml",
+      "sha256": "7cd6169cac46afe8c5272b3e55bb1666870ab0d71e960128bd0d02fbbec61949",
+      "bytes": 2497
+    },
+    {
+      "path": ".github/workflows/release.yml",
+      "sha256": "a7be34d86d567d4483e2d26cd04ba4b9e1e7b3746516ea25e8f73925099a5738",
+      "bytes": 3107
+    },
+    {
+      "path": "cli/.gitignore",
+      "sha256": "d88986f75ee86951e59b49cff68244f90ae0b3e7eafdf19681b6b61f57fc7e91",
+      "bytes": 4
+    },
+    {
+      "path": "cli/main.go",
+      "sha256": "486b839ceb77d3db2779826118ff9ac93890f0943cbbf7d3d1abc31a2771a9e0",
+      "bytes": 15301
+    },
+    {
+      "path": "Dockerfile",
+      "sha256": "501280239b48a1f9e19169c9a269b6a11e03594aeecee72c6216473422b578d9",
+      "bytes": 308
+    },
+    {
+      "path": "docs/init.d/goauthing",
+      "sha256": "b3b63bfffe27e85dab44f3b3c3b44e2ae56f61d1e72bce06b102d5ac26200209",
+      "bytes": 618
+    },
+    {
+      "path": "docs/init.d/goauthing@",
+      "sha256": "5053a73c66d9e4018b0347905eb21037a9948d143a424384972aacfc656145fe",
+      "bytes": 785
+    },
+    {
+      "path": "docs/systemd/system/goauthing.service",
+      "sha256": "754674e8f4efa1235028295daf9646f16b98b3ff154c0671df24caa378ecc4e4",
+      "bytes": 386
+    },
+    {
+      "path": "docs/systemd/system/goauthing@.service",
+      "sha256": "05be4ac33b471833b50c02c8ebc4b1bd16b1f54f5e68749d4caa22c43f06c61f",
+      "bytes": 348
+    },
+    {
+      "path": "docs/systemd/system/goauthing6.service",
+      "sha256": "d55593035e115708795110836fd7daf062920ee18c344468dc6fdbddd0cadd19",
+      "bytes": 395
+    },
+    {
+      "path": "docs/systemd/system/goauthing6@.service",
+      "sha256": "1f8c36ce17d068eeb8c22418d8b1baebf5d132a9207607573862fe00179cb35d",
+      "bytes": 357
+    },
+    {
+      "path": "docs/systemd/user/goauthing.service",
+      "sha256": "756d7d6768ede1f11c5a13d904a17248d9e1220721d524bcead2c585189402a2",
+      "bytes": 336
+    },
+    {
+      "path": "docs/systemd/user/goauthing6.service",
+      "sha256": "73a05c3755892dcb65d419d0acabc0cb1b75075b782d12e9c59db8b294e0402f",
+      "bytes": 348
+    },
+    {
+      "path": "go.mod",
+      "sha256": "ad96dccbca1a2efe3c0293a6605f368ff3fbf3a45c3a779b818d498f39d4082c",
+      "bytes": 571
+    },
+    {
+      "path": "go.sum",
+      "sha256": "5d3a7b221303fa192be7544fadad569dd8ad6a720b3f282d53d93c97297e83da",
+      "bytes": 3708
+    },
+    {
+      "path": "libauth/coding_test.go",
+      "sha256": "bebd900b0d43812a5aca8a82b1bb8020b34a6842e61d4f9738e16d5929173551",
+      "bytes": 1649
+    },
+    {
+      "path": "libauth/coding.go",
+      "sha256": "5c9946fac17f9fb566314e5304a48268c67f07d9744f7945820149f3b2e68346",
+      "bytes": 2181
+    },
+    {
+      "path": "libauth/messages.go",
+      "sha256": "1a327cdf50c82f770e669496c1a2c838cec2baee4c6dcf93c927853eb269ef45",
+      "bytes": 4027
+    },
+    {
+      "path": "libauth/requests_test.go",
+      "sha256": "1f0c8646ef783eb8a3c857a6d38532e142b7e69596b73ee4d58883c9ab786aa1",
+      "bytes": 1026
+    },
+    {
+      "path": "libauth/requests.go",
+      "sha256": "bbca4e8c4ff262ae9503db8db7e6c7f38ac07c6448b6c1c73b47a703083a088d",
+      "bytes": 7000
+    },
+    {
+      "path": "libauth/urls.go",
+      "sha256": "47f8621e01a439f76174d05157ea055f0cf7ef6c0858d5d80f37a21dcc075388",
+      "bytes": 680
+    },
+    {
+      "path": "LICENSE",
+      "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+      "bytes": 35149
+    },
+    {
+      "path": "README.md",
+      "sha256": "1cb2fba63de8c8d50aed5a662408d795a99f44542e4e2b99eedf771991d188ac",
+      "bytes": 6055
+    }
+  ]
+}

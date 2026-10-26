@@ -1,0 +1,66 @@
+# Codex 接续与实施提示词
+
+这些提示词用于新会话。长期规则以 [AGENTS.md](../AGENTS.md) 为准，实际进度以 [HANDOFF.md](../HANDOFF.md) 为准。它们不依赖某个模型名、effort 等级或专有 Workflow 插件。
+
+## 恢复项目上下文
+
+```text
+请读取 AGENTS.md、HANDOFF.md、README.md，检查 git status 和已有代码。
+按需阅读 docs/architecture.md、docs/development.md 和 references/README.md。
+简要说明实际已完成内容、尚未实现内容及下一个可执行任务。
+不要把计划、历史提示词或子 agent 自评当成已运行验证。
+```
+
+## 继续审查架构
+
+```text
+只审查并改进架构，不开始实现应用。
+读取 AGENTS.md、HANDOFF.md、docs/architecture.md、docs/development.md。
+核对 references/GoAuthing 中的实际协议，重点查双栈、状态误判、重试、取消和限速。
+最多调用两个只读子 agent，分别负责协议与运行时；主会话负责整合。
+只采纳有具体失败场景或源码依据的建议，避免为个人工具引入插件框架。
+更新设计文档和 HANDOFF.md，区分源码事实、设计选择和必须校内实测的行为。
+```
+
+## 开始 M0 施工
+
+```text
+请按 AGENTS.md、HANDOFF.md 和 docs/development.md 完成 M0。
+先检查工作区与架构契约，建立 pyproject、src layout、依赖锁文件。
+实现配置模型、严格校验，以及 CLI --help、init、config check。
+不要提前扩展完整认证或保活模块，不创建大量 NotImplementedError 占位代码。
+配置错误、CLI 返回码和凭据不泄漏需要测试；不连接真实校园网。
+执行实际检查，报告命令与退出码，并更新 HANDOFF.md。
+```
+
+## 按文件范围并行实施
+
+```text
+先检查 HANDOFF.md 中的阶段与依赖是否满足。
+公共模型和 HTTP 接口必须已有可审查契约，再调用两个实现子 agent。
+协议 agent 只修改 protocol/ 与协议测试；流量 agent 只修改 limiter.py、traffic.py 及对应测试。
+主会话负责配置、依赖、认证协调和集成；不得由多个 agent 同时修改共享文件。
+若任务依赖未满足，先完成必要阶段，不强行并行。
+每个 agent 提交修改文件、测试命令、结果与未验证项。
+主会话审查和运行集成检查后再汇总完成状态。
+```
+
+## 独立评审代码
+
+```text
+只读审查当前需求与最终 diff，重点检查实际故障路径。
+检查协议字节兼容、重复登录、IPv6 假成功、配额倍增、任务无法退出和敏感日志。
+每条结论提供文件位置、触发条件和建议的回归测试；区分缺陷与偏好。
+不要自动修改文件，不把格式建议升级为功能缺陷，不连接真实认证服务。
+```
+
+## 结束阶段并交接
+
+```text
+核对实际变更与已运行检查，更新 HANDOFF.md。
+记录完成范围、命令和退出码、跳过测试及原因、遗留问题与下一步。
+检查参考快照未改动，真实配置和诊断日志未被暂存。
+提供简短交接说明；不要把尚未执行的校内实测写为通过。
+```
+
+迁移前的 Claude 提示词原样保存在 [历史目录](history/README.md)。Codex 规则入口依据 [官方 AGENTS.md 说明](https://developers.openai.com/codex/guides/agents-md/)。
