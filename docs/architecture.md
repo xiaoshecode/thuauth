@@ -34,7 +34,7 @@ aiohttp 的 TCPConnector 提供 family 参数，因此不使用全局 socket.get
 
 ## 目录与职责
 
-以下结构同时列出当前实现与后续计划。实际完成状态见 HANDOFF.md；M0 已实现 config、models、errors、cli 和包入口；M1 已实现 protocol/coding、protocol/srun 纯函数与合成对拍。HTTP 会话、认证协调和保活模块尚未实现。
+以下结构均已实现；M0–M4 本地验收与校内待测项见 HANDOFF.md，精确构造参数见 runtime-contract.md。
 
 ```text
 thuauth/
@@ -67,6 +67,7 @@ thuauth/
 │   ├── http.py          # 双栈会话、超时、连接池与有界读取
 │   ├── auth.py          # 在线状态、认证协调、重试与冷却
 │   ├── daemon.py        # 保活生命周期和健康巡检
+│   ├── doctor.py        # 配置目标的只读有界诊断
 │   ├── traffic.py       # probe、bulk worker、目标冷却与统计
 │   ├── limiter.py       # 共用字节预算，可注入时钟
 │   ├── logging_setup.py # 日志格式、滚动文件、脱敏
@@ -91,11 +92,11 @@ thuauth/
 
 不为每个小类创建文件。traffic 初期容纳 probe、bulk 与统计，只有复杂度增长后才拆包。依赖在 app 显式构造，无全局 Session、可变配置或隐式单例。
 
-M0 的 CLI 直接调用本地配置模块；app 和异步资源生命周期在 M2 按需引入，避免为当前几个本地命令增加空编排层。尚不创建认证/状态机的占位类。Credentials 和 Target 为当前实际共用的数据模型。
+CLI 的 init/config check 直接调用配置模块；网络命令才导入 app、构造异步资源。没有不可用的占位命令。
 
 ## 核心接口
 
-只在稳定边界使用类型接口，初版不预制通用插件框架。以下异步客户端接口属于 M2 及以后；M1 只实现纯协议函数。
+只在稳定边界使用类型接口，不预制通用插件框架。以下对应实际实现；protocol 仍为纯函数。
 
 ```python
 # protocol/coding.py：编码边界明确使用 bytes
@@ -106,27 +107,30 @@ def srbx1_encode(data: bytes) -> str: ...
 # 返回状态观测而非 bool，网络失败不能被折叠成离线
 class SrunClient:
     async def discover(self) -> AccessContext: ...
-    async def status(self, access: AccessContext) -> OnlineObservation: ...
+    async def status(self, access: AccessContext | None = None) -> OnlineObservation: ...
     async def login(self, credentials: Credentials, access: AccessContext) -> AuthReply: ...
     async def logout(self, username: str, access: AccessContext) -> AuthReply: ...
 
 
 class AuthService:
-    async def status_all(self) -> StatusReport: ...
-    async def ensure_online(self, family: IPFamily) -> AuthOutcome: ...
-    async def logout_all(self) -> LogoutReport: ...
+    async def status_all(self) -> tuple[OnlineObservation, ...]: ...
+    async def ensure_all(self) -> tuple[OnlineObservation, ...]: ...
+    async def logout_all(self) -> tuple[OnlineObservation, ...]: ...
+    def is_online(self, family: IPFamily) -> bool: ...
+    def invalidate(self) -> None: ...
 
 
 class TrafficRunner:
     async def run(self) -> None: ...
-    def snapshot(self) -> TrafficSnapshot: ...
+    def snapshot(self) -> dict[str, object]: ...
+    def reset(self) -> None: ...
 
 
 class Daemon:
     async def run(self, stop: asyncio.Event) -> None: ...
 ```
 
-Config、Credentials、AccessContext 和报告对象使用 dataclass；配置尽量 frozen、slots，集合使用 tuple。Credentials.password 设 repr=False。OnlineObservation 包含 family、状态、观测时间、用户名、IP、原因；不把密码或原始认证响应放入报告。
+Config、Credentials、AccessContext、OnlineObservation 使用 frozen、slots dataclass，集合使用 tuple；CLI 在边界生成版本化字典报告。Credentials 的账号密码均 repr=False，CLI 遮掩用户名，不报告密码或原始认证响应。
 
 SrunClient 注入由 app 管理的 HTTP 会话，而非自行无限创建会话。业务测试替换客户端对象；HTTP 测试用本地服务覆盖实际传输边界。协议类不负责等待退避。
 
@@ -140,12 +144,14 @@ SrunClient 注入由 app 管理的 HTTP 会话，而非自行无限创建会话�
 | OFFLINE | 认证接口明确返回离线 | 通过唯一认证入口尝试重登 |
 | UNKNOWN | 请求超时、DNS 失败、响应无法识别 | 冷却后再查询，不直接提交密码 |
 | UNAVAILABLE | 没有该栈的可用地址或路由 | 低频重新检查，另一栈继续 |
-| AUTHENTICATING | 正在执行认证过程 | 合并或等待同一认证操作 |
+| 认证锁持有中（内部） | 正在执行认证过程 | 等待账号锁，不作为外部观测状态 |
 | BLOCKED | 密码错误、账号禁用或账号冲突 | 停止相关自动认证，给出可操作提示 |
 
 双栈指分别检查与管理 auth4、auth6，不预设两侧会话完全独立。流程为检查两栈、在账号级认证锁下补齐离线栈、每次操作后复查。学校的 double_stack 行为可能让一次认证影响另一栈，必须实测；不能无条件同时重复登录。没有 AAAA 记录只说明某个目标不支持 IPv6，不能单凭这一结果把本机 IPv6 标为 UNAVAILABLE，也不能悄悄回落 IPv4 后报告 IPv6 成功。
 
 每次实际重登前重新获取接入信息与 challenge，不复用旧 token/IP。ac_id 可自动发现，也允许显式覆盖；发现失败不得随意回退到某个数字。发现接口实际走哪个地址族，以原实现和校园网验证为依据。
+
+只读状态不依赖接入发现：在线后发现页面可能恢复正常内容，不再包含 ac_id。未配置覆盖值时状态页使用空 ac_id，无法识别页面则 UNKNOWN。登录/登出仍需重新发现有效 ac_id；实际门户对空查询值的支持待校内确认。
 
 AuthService 是唯一提交登录/登出的入口。health、启动流程、手动命令均调用它；probe 和 bulk 不提交凭据。获取认证锁后再次核对状态，避免两个调用者依次重复登录。等待锁的调用者取消不能影响持锁操作；如果以后共享登录 Task，则由服务管理它，等待者取消与服务停止必须分别处理。错误示例：
 
@@ -153,6 +159,7 @@ AuthService 是唯一提交登录/登出的入口。health、启动流程、手�
 - E2532/E2533 等频率限制按账号冷却，退避可取 30、60、120 秒直至上限 600 秒，并加随机抖动。
 - E2620 不能直接视为目标账号成功，重新核对在线账号和 IP。
 - 登录响应超时可能意味着服务端已经处理，先查状态再决定是否重试。
+- 失败后轮换下一次候选地址族，但仍遵守账号级冷却，避免 IPv4 持续失败使 IPv6 永久饥饿。
 - 未知协议错误只输出本地定义的分类和诊断，不透传原始错误码或消息；限制重试，不能统一当作网络抖动。
 
 在线却属于其他账号时，不主动踢下该账号。status、doctor 不要求输入密码，也不执行隐式登录。keep 的 Ctrl+C 只结束守护，不主动登出；logout 是显式命令。
@@ -166,10 +173,8 @@ AuthService 是唯一提交登录/登出的入口。health、启动流程、手�
 ```text
 app 创建并持有会话与实例锁
   └─ daemon 的 TaskGroup
-      ├─ IPv4 健康巡检
-      ├─ IPv6 健康巡检
-      ├─ probe 调度
-      ├─ bulk workers
+      ├─ 账号级巡检（内部并行观察两栈，串行认证）
+      ├─ traffic TaskGroup（probe 和 bulk workers）
       └─ 周期统计
 ```
 
@@ -179,7 +184,7 @@ app 创建并持有会话与实例锁
 
 认证请求设置连接、读取与整体期限；bulk 单独设置连接期限、实际读等待期限和单次传输期限。限速等待不算服务器读取超时，不能把认证的 5 秒超时直接用于低速大文件下载。实现需用慢服务器测试验证 aiohttp 缓冲与超时的实际交互。
 
-检测到较长调度间隔或网络恢复时，重新查询状态、丢弃失效连接、DNS 缓存与过期接入信息，跳过错过的巡检周期，不补发积压请求。使用递增的网络版本标记异步结果，旧版本响应不得覆盖新状态；恢复时重置下载额度，但保留凭据阻断与服务端冷却。无需首版就实现各操作系统专用的网络事件监听。
+检测到超过 max(60 秒, 3 个健康周期) 的调度间隔时，先失效状态、取消并等待旧任务，再关闭重建会话/DNS 缓存、重置下载额度并重启巡检。版本标记防止旧响应覆盖新状态；凭据阻断和目标冷却保留。普通断网由超时及下一次巡检恢复，不接入系统网络事件；不补发错过的周期。
 
 ## 流量模型
 
@@ -191,11 +196,11 @@ bulk 面向用户选择的大文件或可控测试服务，默认下载目标留
 
 - IPv4、IPv6 worker 共用全局预算；两栈可用时公平调度，默认至少各一个 worker。改变 worker 数不改变总速率。
 - 请求前控制并发与请求间隔，读块前申请字节预算，读取后按实际字节结算；短读退回未使用额度，等待与取消不泄漏预算。
-- 限速器使用单调时钟，明确最大突发量。避免锁内 sleep；测试公平性、取消、唤醒以及并发总额。
+- 限速器用单调时钟和 FIFO 队列，突发为 min(chunk_bytes, 65536, ceil(每秒速率))，至少 1 字节。无锁内 sleep；复位丢弃全部额度，忽略旧代退款。
 - 支持 Range 的源请求有限区间并检查 Content-Range；忽略 Range 返回 200 时仍执行本地读取上限，不整文件读入内存。
 - 使用小块流式读取，不落盘大文件；设置 Accept-Encoding: identity 并关闭自动解压，以响应体字节统计，减少压缩口径歧义。
 - 明确这不是网卡计量：TLS、TCP、重传、HTTP 头以及系统/库预读不计入应用正文统计。限制缓冲大小和并发可约束偏差，但不能保证网卡每分钟恰好 10 MiB。
-- 302/登录页、小 HTML 响应、零字节内容不能算有效 bulk 进展；bulk 默认关闭自动重定向，只允许显式受信目标和有限跳数，未知跳转暂停该源。错误状态限量读取后关闭。
+- 302/登录页、HTML、零字节内容不能算成功 bulk 请求；所有重定向均不跟随，错误状态不读正文。已读取的无效内容仍计入实际 bytes，successes 单独记录。
 - 429 遵守 Retry-After；异常大值将目标暂停并提示，不提前重试。冷却按目标跨两栈、所有 worker 共享。404/403、连续失败等同样使目标进入冷却。全部目标失效后等待，不立即循环，也不通过提高并发补足“欠下”的流量。
 - 网络 UNKNOWN 时暂停该栈 bulk；普通目标失败不改变认证状态。probe 与健康检查各自保留低频恢复路径。
 
@@ -257,14 +262,14 @@ M0 已明确的行为如下：
 - `init` 要求 stdin、stderr 均为终端；使用 getpass 两次确认密码，无法隐藏输入时中止。只清理学号首尾空白，密码的空格和 Unicode 原样保存。
 - 默认不覆盖已有文件；以同目录临时文件加原子硬链接完成首次发布，避免并发创建时误覆盖。不支持硬链接的文件系统明确报错。`init --force` 用原子替换重置全部选项到默认值并保存新凭据，拒绝目标符号链接。
 - Windows 对空临时文件调用系统 whoami/icacls 设置当前用户的私有 ACL，成功后才写入凭据；Unix 临时文件模式为 0600。不会修改已有父目录权限。
-- `-c/--config` 可放在根命令或子命令后；M0 没有业务布尔覆盖选项。JSON 中显式 false 与空列表不会被默认值覆盖。
+- `-c/--config` 可放在根命令或子命令后。网络命令支持 --[no-]ipv4/ipv6；keep 另支持 --[no-]auto-relogin、--[no-]bulk、--rate、--workers-ipv4/ipv6、--duration。覆盖后重新校验，不写回配置；显式 false 保留。
 - 配置最多 1 MiB，接受 UTF-8 BOM；错误包含已知字段路径或 JSON 行列，未知字段名统一显示 `<unknown>`，不回显原文与非法值。重复键、非有限数值、超深嵌套会报配置错误。命令行用法错误同样不回显错误参数。
 - 临时文件清理失败返回脱敏错误，保留原始写入失败原因；若配置已经发布则明确说明已写入，并提示检查配置目录内的 `.thuauth-*.tmp`。文件在写入任何凭据前已限制权限。
 - schema_version 仅接受整数 1；auth 至少启用一栈；ac_id 为正数字符串或 null。health 间隔为 1–3600 秒，probe 间隔为 1–86400 秒。
 - probe 响应上限 1–1048576 字节；bulk 的块上限 1–1048576 字节且不超过单次响应上限，单次响应最大 1 GiB。总 worker 数不超过 32；下载目标速率为 0.01–1048576 MiB/min。
 - 各类目标最多 64 项，仅允许不含内嵌账号密码或 fragment 的 HTTP(S) URL。bulk 开启时，每个有效 worker 地址族都需要相应目标；禁用地址族的 worker 配置保留但不激活。probe 空目标列表表示不探测。
 
-上述数值上限用于约束无效配置，不表示程序已具备对应流量能力。认证与流量行为仍需在 M1–M3 实现和验证。
+上述上限约束配置，不是性能承诺。本机测试覆盖正常速率与边界，没有测试允许配置的最高吞吐量。
 
 ## 实例互斥与诊断
 
@@ -272,13 +277,13 @@ M0 已明确的行为如下：
 
 “多开”优先通过一个进程内多个 worker 实现。首版不支持同账号多个守护进程竞争认证。filelock 参考 [官方文档](https://py-filelock.readthedocs.io/en/latest/)。
 
-日志包括时间、模块、task 名称、family、事件、目标主机、耗时、字节与错误类型；常态每分钟输出汇总，状态切换即时输出。统计区分 bulk/probe、实际读取/有效数据，并记录观测时间与降级原因。
+日志包含时间、级别、模块和本地事件；状态转换含 family/state/reason，每分钟汇总流量。快照按 probe/bulk 和地址族记录 bytes、请求/成功/失败/中止数、最后状态/分类，目标按配置索引记录冷却，不输出 URL。bytes 是实际读取量，包含随后判定无效的正文，不等同有效文件字节。
 
 即使 --debug，也不记录 password、MD5(password)、token、info、chksum、cookie、完整认证 URL 或原始认证响应。HTTP 异常往往包含请求 URL，应在异常边界结构化提取安全字段，不直接把异常字符串传给日志。用户名默认遮掩；不自动打包原始配置进诊断文件。
 
 doctor 只检查配置、DNS、地址族、TLS、认证接口可达性、目标基本行为，输出每项通过/失败/未测试，不偷偷提交登录或启动大流量。status --json 提供稳定的机器可读输出。
 
-退出码建议：0 操作成功，1 非预期程序错误，2 配置或用法错误，3 明确认证拒绝，4 临时网络/协议失败或查询离线，5 实例占用，130 用户中断。部分成功/降级情况写进结构化结果；status 两栈均在线才返回 0，单栈运行需显式禁用不需要的栈才能符合这一成功定义。
+退出码：0 成功，1 未预期程序错误，2 配置/用法错误，3 明确拒绝/账号冲突，4 网络/协议失败、离线、降级或诊断未通过，5 实例占用，130 用户中断。启用的栈均在线才返回 0（logout 要求均离线），doctor 还要求诊断通过；单栈运行需显式禁用另一栈。
 
 ## 协议兼容与发布
 

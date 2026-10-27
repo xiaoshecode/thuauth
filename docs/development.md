@@ -1,6 +1,6 @@
 # thuauth 实施与协作
 
-本计划把开发分为可独立验收的阶段，并用有限数量的子 agent 处理互不冲突的工作。架构见 [architecture.md](architecture.md)，实际进度与检查结果见 [HANDOFF.md](../HANDOFF.md)。M0、M1 已完成；接下来实施 M2 Windows 认证客户端。
+本计划把开发分为可独立验收的阶段，并用有限数量的子 agent 处理互不冲突的工作。架构见 [architecture.md](architecture.md)，实际检查见 [HANDOFF.md](../HANDOFF.md)。M0–M4 代码均已实现；后续以维护、新功能及用户校内验收为主，不重复创建已完成模块。
 
 2026-10-27 用户明确当前只需 Windows。实现、验收和后续 CI 均聚焦 Windows；Linux/macOS 验证不作为里程碑阻塞项，不额外扩展跨平台功能。Windows 缺少 IPv6 网络时的降级仍属于必须覆盖的行为。
 
@@ -28,9 +28,9 @@
 | --- | --- | --- |
 | M0 工程与契约（已完成） | pyproject、锁文件、模型、配置、异常、测试入口 | CLI help/init/config check 可用；配置失败与原子写入测试通过 |
 | M1 协议（已完成） | coding、srun、合成 fixtures | Go 向量、登录登出参数、JSONP、错误响应测试通过 |
-| M2 认证客户端 | HTTP 会话、AuthService、login/logout/status/doctor | 本地假服务器通过双栈、超时、账号冲突等测试；无需真实密码 |
-| M3 保活流量 | daemon、traffic、limiter、统计与退出 | 本地持续流测试、速率预算、恢复、取消、进程锁通过 |
-| M4 集成与交付 | README 使用说明、CI、许可与来源说明 | 静态检查和完整测试通过；列出校内实测步骤与待测项 |
+| M2 认证客户端（已实现） | HTTP 会话、AuthService、login/logout/status/doctor | 本地假服务器通过双栈、超时、账号冲突等测试；无需真实密码 |
+| M3 保活流量（已实现） | daemon、traffic、limiter、统计与退出 | 本地持续流测试、速率预算、恢复、取消、进程锁通过 |
+| M4 集成与交付（已实现） | README、Windows CI、来源和校内验收说明 | 最终实际检查/远端状态见 HANDOFF；校内验收不冒充通过 |
 
 不要以“700 行”作为完成标准，不计入测试的行数也不能衡量鲁棒性。先实现一条完整可运行路径，再加功能；避免创建大量只会抛 NotImplementedError 的伪完成模块。
 
@@ -94,21 +94,21 @@ uv run pytest -q
 
 在 Codex 中打开 thuauth 仓库根目录，首先读取 AGENTS.md 和 HANDOFF.md。项目级长期规则放在 AGENTS.md，详细设计与当前进度分别维护，避免重复。Codex 对项目规则的读取方式见 [官方 AGENTS.md 说明](https://developers.openai.com/codex/guides/agents-md/)。本项目不固定个人模型、effort 或审批设置，也不把本机认证文件提交进仓库。
 
-开始一个实施阶段可以直接使用下面的提示：
+后续维护可以直接使用下面的提示：
 
 ```text
 请阅读 AGENTS.md、HANDOFF.md、docs/architecture.md、docs/development.md。
-当前只验收 Windows。完成 M2 HTTP 会话、AuthService、login/logout/status/doctor 与本地假服务器测试。
+当前只验收 Windows。M0–M4 已实现；根据本次具体需求修改，避免重复施工。
 先检查实际工作区状态，再按文档实施；关键设计冲突要指出。
 不要连接校园网提交凭据，不要启动公网 bulk 下载。
 对缺陷先写可复现测试；完成后实际运行受影响检查。
 报告变更文件、命令和退出码，以及尚未验证的部分。
 ```
 
-后续接口基线已具备、协议与流量任务可独立验收时使用（M0 完成不表示这些依赖已全部就绪）：
+当前接口基线已具备，后续有两个可独立验收的任务时使用：
 
 ```text
-以当前已提交的接口为基线，调用两个子 agent 并行实现协议与流量模块。
+以当前已提交接口为基线，将本次两个独立任务分配给两个子 agent。
 按 development.md 限定文件范围，并给每个 agent 明确验收条件。
 主会话负责公共接口和集成。完成后交给只读 reviewer 检查故障路径。
 独立运行集成测试，修复实际缺陷后提交结果，不用 agent 自评替代验证。
@@ -123,3 +123,15 @@ Codex 的模型、工具、权限与工作区隔离使用当前安装实际提�
 里程碑完成后更新 HANDOFF.md 的实际进度、检查结果和下一步，再进行小范围 commit。新会话读取规则、交接文档与 git diff 即可接续，不依赖旧会话恢复。历史 Claude 规则和提示词已存于 [history/README.md](history/README.md)，仅用于追溯。
 
 真实密码只由用户在本机交互或配置文件中输入。gitignore 不能撤回已提交内容，也不能覆盖所有自定义文件名；提交前检查暂存 diff。移植 GPLv3 代码时保留来源与许可证，依赖版本由 uv.lock 固定。
+
+## M2–M4 实际协作与实现裁决
+
+本轮主 agent 维护公共契约、auth/app/daemon/CLI、进程锁和集成；两个实现 agent 分别拥有 HTTP/诊断及流量/限速模块与对应测试。流量 agent 完成后只读评审主 agent 的认证和生命周期代码。所有实现经主会话全量检查后集成。
+
+- 状态查询独立于 ac_id 发现，避免上线后发现页面变化导致误判；认证操作仍重新发现，不猜接入点。
+- Srun 用 GET 执行登录/登出，HTTP 层阻止自动连接重放，超时后由 AuthService 复查。
+- 恢复流程先取消并等待旧任务，再重建资源；不在旧 worker 使用 Session 时原地关闭。
+- 统计报告实际读取 bytes 与请求结果，目标按索引标识；不承诺网卡级精确流量。
+- CI 仅 Windows，Python 3.12/3.14，固定 action 提交及 uv 版本，运行 lint、format、mypy、pytest、build；3.12 另运行原 Go 对拍再生成检查。
+
+校内验收按 [campus-validation.md](campus-validation.md)，用户在本机输入凭据。未收到明确真实网络操作要求时，agent 继续使用本机假服务器。

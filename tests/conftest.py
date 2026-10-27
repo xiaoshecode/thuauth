@@ -24,7 +24,11 @@ async def http_server():
                 pytest.skip("IPv6 loopback is unavailable on this Windows host")
             raise
         address = runner.addresses[0]
-        return f"http://[{host}]:{address[1]}" if family == socket.AF_INET6 else f"http://{host}:{address[1]}"
+        return (
+            f"http://[{host}]:{address[1]}"
+            if family == socket.AF_INET6
+            else f"http://{host}:{address[1]}"
+        )
 
     yield start
     for runner in reversed(runners):

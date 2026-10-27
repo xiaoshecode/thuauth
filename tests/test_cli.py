@@ -135,11 +135,6 @@ def test_version_exits_successfully_without_reading_config(monkeypatch, capsys):
     "args",
     [
         ["unknown-command"],
-        ["login"],
-        ["logout"],
-        ["status"],
-        ["keep"],
-        ["doctor"],
         ["config"],
         ["config", "unknown-subcommand"],
         ["--unknown-option"],
