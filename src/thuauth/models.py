@@ -2,9 +2,11 @@
 
 from dataclasses import dataclass, field
 from enum import StrEnum
+from time import monotonic
 from typing import Literal
 
 type TargetFamily = Literal["ipv4", "ipv6", "both"]
+type IPFamily = Literal["ipv4", "ipv6"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,3 +42,28 @@ class AuthReply:
     kind: AuthReplyKind
     code: str | None
     message: str
+
+
+class OnlineState(StrEnum):
+    ONLINE = "online"
+    OFFLINE = "offline"
+    UNKNOWN = "unknown"
+    UNAVAILABLE = "unavailable"
+    BLOCKED = "blocked"
+
+
+@dataclass(frozen=True, slots=True)
+class AccessContext:
+    family: IPFamily
+    ac_id: str
+    ip: str = field(default="", repr=False)
+
+
+@dataclass(frozen=True, slots=True)
+class OnlineObservation:
+    family: IPFamily
+    state: OnlineState
+    username: str | None = field(default=None, repr=False)
+    ip: str | None = field(default=None, repr=False)
+    reason: str = ""
+    observed_at: float = field(default_factory=monotonic)

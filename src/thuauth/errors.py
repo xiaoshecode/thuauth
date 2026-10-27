@@ -28,3 +28,18 @@ class ProtocolError(ThuauthError):
     def __init__(self, code: str) -> None:
         self.code = code if code in self._MESSAGES else "invalid_response"
         super().__init__(self._MESSAGES[self.code])
+
+
+class NetworkError(ThuauthError):
+    """Safe classification only; never retain an aiohttp exception or request URL."""
+
+    _KINDS = {"timeout", "dns", "unavailable", "tls", "http", "connection"}
+
+    def __init__(self, kind: str) -> None:
+        self.kind = kind if kind in self._KINDS else "connection"
+        super().__init__(f"网络请求失败（{self.kind}）")
+
+
+class InstanceBusyError(ThuauthError):
+    def __init__(self) -> None:
+        super().__init__("已有 login/logout/keep 实例运行，请先停止该实例")
