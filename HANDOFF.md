@@ -6,7 +6,7 @@ GitHub：[xiaoshecode/thuauth](https://github.com/xiaoshecode/thuauth)，本轮�
 
 ## 当前状态
 
-M0–M4 的 Windows 代码、文档及 CI 配置已实现，本机最终全量检查通过，两个实现 agent 的交叉评审已结束并修复确认问题。初版远端 CI 已成功，最后流量修复的远端结果将在收尾记录中补记。不能将此状态等同于真实校园网认证成功。
+M0–M4 的 Windows 代码、文档及 CI 配置已完成，本机最终全量检查和远端 Windows 双版本 CI 均通过，两个实现 agent 的交叉评审已结束并修复确认问题。不能将此状态等同于真实校园网认证成功。
 
 - M0：Python 包、uv.lock、严格不可变配置、init/config check，Windows 写入前 ACL、原子发布和不覆盖保护。
 - M1：纯协议编码、参数/JSONP/分类，85 个 Go 编码向量、10 个完整请求案例，合成材料可离线再生成。
@@ -47,6 +47,8 @@ M0–M4 的 Windows 代码、文档及 CI 配置已实现，本机最终全量�
 | 分发包成员、参考清单检查 | 0 | wheel 23 项、sdist 39 项，无工具/缓存/真实配置；23 参考文件 SHA 一致 |
 | 独立 wheel 环境安装及 `python -I -m thuauth keep --help`、`config check`、网络模块 import | 0 | 来自 `.tools/wheel-smoke/Lib/site-packages`，无需源码编辑安装 |
 | `git diff --check` | 0 | 通过 |
+| GitHub Windows / Python 3.12.10 | 0 | lint、format、mypy、build；**850 passed，1 skipped，39.51 秒**；Go 对拍通过 |
+| GitHub Windows / Python 3.14.9 | 0 | lint、format、mypy、build；**850 passed，1 skipped，36.36 秒** |
 
 唯一 skip 是 `test_posix_private_permissions`，Windows 下不适用。IPv6 回环 HTTP 与流量测试均实际执行，没有 IPv6 跳过；Windows ACL、两个真实进程互斥、进程被终止后锁恢复均测试通过。
 
@@ -62,10 +64,16 @@ M0–M4 的 Windows 代码、文档及 CI 配置已实现，本机最终全量�
 - 真正的断网/休眠/系统 Ctrl+C 行为和交互 getpass 仍需用户在 Windows 终端验证；已覆盖合成时间跳跃、取消、资源释放与锁，但不冒充系统级实测。
 - 持续下载源由用户选择，默认 bulk.enabled=false；未验证任何公网源的长期可用性或最高配置速率。
 - DNS 等待有超时，但系统 getaddrinfo 已开始的解析线程不能强制终止，极端系统解析器卡死仍可能延长 Python 进程退出。
-- 本机实测 Python 3.12.14；初版远端实测 Windows/Python 3.12.10 与 3.14.9。最终流量修复的远端结果见收尾记录。Linux/macOS 不在交付范围。
+- 本机实测 Python 3.12.14，最终远端实测 Windows/Python 3.12.10 与 3.14.9。其他 Python 版本没有实测；Linux/macOS 不在交付范围。
 
 ## 后续工作
 
 按 [docs/campus-validation.md](docs/campus-validation.md) 由用户在校园网执行验收，凭据只在自己的终端输入。若门户行为与保守解析不同，先提取最小脱敏字段结构、建立合成回归，再修改对应协议/HTTP 模块；不要直接放宽 UNKNOWN 为 OFFLINE。
 
 新会话读取 AGENTS.md、本文件及 docs/prompts.md 的“维护与新功能”。M0–M4 均已有实现，不重复施工，不依赖 Claude 专用命令或历史会话恢复。
+
+## 收尾与远端记录
+
+完整实现提交为 `423f983`，最终评审修复为 `544d6b6f16d4231c37c1c10e41c73da687728036`。该最终代码的 [Windows CI 40438208804](https://github.com/xiaoshecode/thuauth/actions/runs/40438208804) 状态 success，两项作业与上述计数均从实际日志核对。
+
+本文件的最终结果补记不改代码、测试或工作流，因此作为单独文档提交，不重复运行 CI。工作分支 `codex/windows-complete` 与默认分支 `codex/bootstrap` 同步相同内容，均只快进、不强推；文档收尾提交号以 `git log -1` 为准。未创建发布标签或上传 GitHub Release；可安装 wheel/sdist 位于本机忽略目录 dist/，克隆后可用 uv build 重建。
