@@ -1,12 +1,12 @@
 # thuauth Python 架构
 
-版本：2026-10-26，供实现与审查使用。
+版本：2026-10-27，供实现与审查使用。当前只交付与验收 Windows；Linux/macOS 不在本阶段支持范围，已有轻量兼容代码不构成跨平台承诺。
 
 thuauth 是个人使用的清华校园网客户端。它用学号与密码认证，分别管理 IPv4、IPv6 的在线状态，并在认证有效时访问指定网站、生成可配置的下载流量。实现采用 Python 3.12+、asyncio 和 aiohttp；业务状态、协议编码和 HTTP 传输分离，便于独立测试与替换。
 
 ## 需求与边界
 
-- 真实学号、密码保存在本机 JSON；交互输入使用 getpass，默认路径为 Windows `%APPDATA%/thuauth/config.json`，Linux 使用 `$XDG_CONFIG_HOME/thuauth/config.json` 或 `~/.config/thuauth/config.json`。
+- 真实学号、密码保存在本机 JSON；交互输入使用 getpass，Windows 默认路径为 `%APPDATA%/thuauth/config.json`。当前不扩展其他系统支持。
 - 支持 login、logout、status、keep；补充 init、config check、doctor 供初始化和排错。
 - 默认启用双栈与自动重登；缺少 IPv6 网络时，IPv4 继续工作并明确显示 IPv6 不可用。
 - 低频访问 info.tsinghua.edu.cn、baidu.com、bing.com，并允许自行增删目标。
@@ -19,7 +19,7 @@ thuauth 是个人使用的清华校园网客户端。它用学号与密码认证
 
 | 部分 | 选择 | 原因 |
 | --- | --- | --- |
-| Python | 最低 3.12，开发解释器选兼容的稳定版 | 使用成熟接口，兼容性由 CI 验证 |
+| Python | 最低 3.12，Windows 稳定版解释器 | 使用成熟接口，后续 CI 在 Windows 验证 |
 | HTTP | aiohttp | 原生异步流式读取、连接池、IPv4/IPv6 family 配置 |
 | 并发 | asyncio.TaskGroup | 统一任务生命周期与取消，减少跨线程共享状态 |
 | 跨进程互斥 | filelock | 复用跨平台文件锁，避免自行维护 Windows 锁代码 |
@@ -34,7 +34,7 @@ aiohttp 的 TCPConnector 提供 family 参数，因此不使用全局 socket.get
 
 ## 目录与职责
 
-以下结构同时列出当前实现与后续计划。实际完成状态见 HANDOFF.md；M0 已实现 config、models、errors、cli 和包入口，认证、HTTP 与保活模块尚未实现。
+以下结构同时列出当前实现与后续计划。实际完成状态见 HANDOFF.md；M0 已实现 config、models、errors、cli 和包入口；M1 已实现 protocol/coding、protocol/srun 纯函数与合成对拍。HTTP 会话、认证协调和保活模块尚未实现。
 
 ```text
 thuauth/
@@ -73,11 +73,12 @@ thuauth/
 │   └── protocol/
 │       ├── __init__.py
 │       ├── coding.py    # 纯字节算法与散列
-│       └── srun.py      # 参数构造、JSONP、端点交互与响应解释
+│       └── srun.py      # 参数构造、JSONP 与响应解释（纯函数）
 └── tests/
     ├── fixtures/        # 合成或脱敏的协议响应
     ├── test_coding.py
     ├── test_protocol.py
+    ├── test_go_vectors.py
     ├── test_config.py
     ├── test_auth.py
     ├── test_http.py
@@ -94,7 +95,7 @@ M0 的 CLI 直接调用本地配置模块；app 和异步资源生命周期在 M
 
 ## 核心接口
 
-只在稳定边界使用类型接口，初版不预制通用插件框架。
+只在稳定边界使用类型接口，初版不预制通用插件框架。以下异步客户端接口属于 M2 及以后；M1 只实现纯协议函数。
 
 ```python
 # protocol/coding.py：编码边界明确使用 bytes
@@ -152,7 +153,7 @@ AuthService 是唯一提交登录/登出的入口。health、启动流程、手�
 - E2532/E2533 等频率限制按账号冷却，退避可取 30、60、120 秒直至上限 600 秒，并加随机抖动。
 - E2620 不能直接视为目标账号成功，重新核对在线账号和 IP。
 - 登录响应超时可能意味着服务端已经处理，先查状态再决定是否重试。
-- 未知协议错误保留经过脱敏的错误码与诊断信息，限制重试，不能统一当作网络抖动。
+- 未知协议错误只输出本地定义的分类和诊断，不透传原始错误码或消息；限制重试，不能统一当作网络抖动。
 
 在线却属于其他账号时，不主动踢下该账号。status、doctor 不要求输入密码，也不执行隐式登录。keep 的 Ctrl+C 只结束守护，不主动登出；logout 是显式命令。
 
@@ -280,6 +281,18 @@ doctor 只检查配置、DNS、地址族、TLS、认证接口可达性、目标�
 退出码建议：0 操作成功，1 非预期程序错误，2 配置或用法错误，3 明确认证拒绝，4 临时网络/协议失败或查询离线，5 实例占用，130 用户中断。部分成功/降级情况写进结构化结果；status 两栈均在线才返回 0，单栈运行需显式禁用不需要的栈才能符合这一成功定义。
 
 ## 协议兼容与发布
+
+M1 的实际协议边界如下；这些函数不发起网络请求：
+
+- `coding.xencode(bytes, bytes)` 与 `srbx1_encode(bytes)` 实现字节编码。非空输入的 key 至少 13 字节，才能形成 Go 使用的四个小端 word；过短 key 报 ProtocolError，替代参考实现的数组越界。空数据编码为空。长 token 按参考实现取前四个 word 参与编码，但 checksum 仍使用完整 token。
+- `srun.serialize_info` 复现 Go 字典键排序、紧凑 JSON、UTF-8，以及 `<>&`、U+2028、U+2029 转义。登录包含 password；登出省略该字段。
+- `build_challenge_params`、`build_login_params` 与 `build_logout_params` 返回参数映射，不加入 callback、不拼接 URL、不记录日志。登出 API 不接收密码。纯编码支持合成空密码以验证 Go 兼容；实际登录前由 Config/AuthService 要求填写凭据，不能把空字符串当成登出。HTTP 层在 M2 负责实际请求编码。
+- 登录摘要为普通 MD5(password)，不是 HMAC；`{MD5}` 前缀只出现在 password 参数，checksum 使用无前缀摘要。登出 checksum 省略密码摘要。
+- IP 可以为空，或为有效 IPv4/IPv6 文本；不规范化其拼写、不附加 scope ID、不自动用 challenge 的地址替换签名地址。ac_id 保留有效数字字符串原文。
+- `parse_jsonp` 限制响应最多 64 KiB，严格匹配 callback；允许外围 ASCII 空白和单个尾分号。拒绝无效 UTF-8、重复键、非有限数值、超深嵌套、非对象根、额外脚本和截断响应，不执行任何 JavaScript。
+- `parse_challenge` 要求 res=ok 和有效 challenge，保留可选 client_ip 为只读证据；token 与地址不进入 repr。
+- `parse_auth_reply` 返回固定类别：ACCEPTED、BLOCKED、THROTTLED、ALREADY_ONLINE、REJECTED。凭据错误、禁用、地址绑定/黑名单、欠费和额度耗尽等已映射账号限制为 BLOCKED，E2532/E2533 为 THROTTLED，E2620 要复查。error=ok 时 ecode 只允许缺失、整数 0 或字符串 "0"，其他组合报 ProtocolError。ACCEPTED 仅表示接口接受操作，仍需 M2 核对在线状态。未知返回文本和错误码不向上游回显，不能自动当作可重试的离线状态。
+- M1 只提交标记 synthetic 的合成对拍材料。Go fixture 工具从只读快照提取原函数执行，不通过 Python 实现产生自己的期望答案。
 
 现代化改变 Python 组织方式与故障处理，不能自行把服务器要求的 MD5、SHA1、XEncode 或 JSONP 换成另一套认证协议。以仓库 `3730e252ca11e6abbd055d7850c417c5751c1efa` 为移植基线，并用测试固定字节行为。
 

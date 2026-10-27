@@ -37,6 +37,8 @@ M0 已完成；此模板保留用于回顾验收范围或重建，正常接续�
 
 ## 继续 M1 协议
 
+M1 已完成；此模板保留用于复查范围，正常接续使用下面的 M2 模板。
+
 ```text
 读取 AGENTS.md、HANDOFF.md 和 docs/development.md，核对已实现的 M0 契约。
 完成 M1：移植 references/GoAuthing 的纯编码、登录登出参数与 JSONP 解析。
@@ -45,7 +47,20 @@ M0 已完成；此模板保留用于回顾验收范围或重建，正常接续�
 执行实际检查，更新 HANDOFF.md，报告哪些行为仍需校内验证。
 ```
 
+## 继续 M2 Windows 认证客户端
+
+```text
+读取 AGENTS.md、HANDOFF.md、docs/architecture.md 和 docs/development.md，核对工作区。
+当前只支持 Windows，沿用 M0 配置与 M1 纯协议接口完成 M2。
+实现地址族明确的 HTTP 会话、AuthService、login/logout/status/doctor；用本机假服务器测试。
+重点覆盖双栈联动、UNKNOWN 不重登、账号阻断、认证超时后复查、取消与资源释放。
+保留协议与 HTTP 层分离，不记录敏感认证材料，不连接真实认证服务或启动公网 bulk。
+运行真实检查，更新 HANDOFF.md，报告 Windows 验证结果与校内待测项。
+```
+
 ## 按文件范围并行实施
+
+先完成 M2 公共 HTTP/认证接口，再评估协议维护与 M3 流量任务能否独立并行。
 
 ```text
 先检查 HANDOFF.md 中的阶段与依赖是否满足。

@@ -1,6 +1,8 @@
 # thuauth 实施与协作
 
-本计划把开发分为可独立验收的阶段，并用有限数量的子 agent 处理互不冲突的工作。架构见 [architecture.md](architecture.md)，实际进度与检查结果见 [HANDOFF.md](../HANDOFF.md)。M0 已建立包、配置与本地 CLI；接下来实施 M1 协议。
+本计划把开发分为可独立验收的阶段，并用有限数量的子 agent 处理互不冲突的工作。架构见 [architecture.md](architecture.md)，实际进度与检查结果见 [HANDOFF.md](../HANDOFF.md)。M0、M1 已完成；接下来实施 M2 Windows 认证客户端。
+
+2026-10-27 用户明确当前只需 Windows。实现、验收和后续 CI 均聚焦 Windows；Linux/macOS 验证不作为里程碑阻塞项，不额外扩展跨平台功能。Windows 缺少 IPv6 网络时的降级仍属于必须覆盖的行为。
 
 ## 实现前的架构评审
 
@@ -25,7 +27,7 @@
 | 阶段 | 交付 | 完成标准 |
 | --- | --- | --- |
 | M0 工程与契约（已完成） | pyproject、锁文件、模型、配置、异常、测试入口 | CLI help/init/config check 可用；配置失败与原子写入测试通过 |
-| M1 协议 | coding、srun、合成 fixtures | Go 向量、登录登出参数、JSONP、错误响应测试通过 |
+| M1 协议（已完成） | coding、srun、合成 fixtures | Go 向量、登录登出参数、JSONP、错误响应测试通过 |
 | M2 认证客户端 | HTTP 会话、AuthService、login/logout/status/doctor | 本地假服务器通过双栈、超时、账号冲突等测试；无需真实密码 |
 | M3 保活流量 | daemon、traffic、limiter、统计与退出 | 本地持续流测试、速率预算、恢复、取消、进程锁通过 |
 | M4 集成与交付 | README 使用说明、CI、许可与来源说明 | 静态检查和完整测试通过；列出校内实测步骤与待测项 |
@@ -96,7 +98,7 @@ uv run pytest -q
 
 ```text
 请阅读 AGENTS.md、HANDOFF.md、docs/architecture.md、docs/development.md。
-完成 M1，移植纯协议编码、登录登出参数与 JSONP 解析，并补齐 Go/Python 对拍。
+当前只验收 Windows。完成 M2 HTTP 会话、AuthService、login/logout/status/doctor 与本地假服务器测试。
 先检查实际工作区状态，再按文档实施；关键设计冲突要指出。
 不要连接校园网提交凭据，不要启动公网 bulk 下载。
 对缺陷先写可复现测试；完成后实际运行受影响检查。

@@ -12,13 +12,14 @@
 ## 实现约定
 
 - Python 3.12+，asyncio + aiohttp；另用 filelock。CLI 用 argparse，日志用 logging。
+- 当前只交付和验收 Windows 环境；不为 Linux/macOS 增加实现或验证任务。已有轻量兼容分支可保留，不宣称跨平台支持。
 - 使用 src layout、pyproject.toml 与 uv.lock；不为固定行数牺牲可读性和错误处理。
 - 保持协议字节兼容，保留 GPLv3 许可和原作者来源。参考源码保持不变，改进写在 src/thuauth/。
 - 禁止全局 socket 补丁。认证与下载会话隔离，IPv4/IPv6 显式选择 family。
 - 自动重登只由 AuthService 协调；UNKNOWN、单个网站失败或 IPv6 不可用不能触发密码重试。
 - 10 MiB/min 指全部 bulk worker 合计正文读取预算；增加并发不放大总速率。
 - 预期网络故障局部处理；编程异常必须报告；CancelledError 清理后传播。
-- 明文配置按用户要求保存在本机。不得把密码、token、散列、info、chksum、完整认证 URL 写入日志、提示词或提交。
+- 明文配置按用户要求保存在本机。不得把真实密码、token、散列、info、chksum、完整认证 URL 写入日志、提示词或提交。对拍 fixture 可保存明确标记的合成材料，不能取自真实认证会话。
 - 默认测试使用本机假服务器；真实校园网登录和公网 bulk 下载需用户明确要求。
 
 ## 协作与交付
