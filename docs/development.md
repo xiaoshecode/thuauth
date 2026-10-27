@@ -132,6 +132,7 @@ Codex 的模型、工具、权限与工作区隔离使用当前安装实际提�
 - Srun 用 GET 执行登录/登出，HTTP 层阻止自动连接重放，超时后由 AuthService 复查。
 - 恢复流程先取消并等待旧任务，再重建资源；不在旧 worker 使用 Session 时原地关闭。
 - 统计报告实际读取 bytes 与请求结果，目标按索引标识；不承诺网卡级精确流量。
+- 只读交叉评审与回归修复覆盖地址族认证轮换、意外任务取消、同 URL 的双栈传输故障隔离、带注释 HTML 识别和大 read 导致缓冲水位变化。traffic 内部任务也受监督，不能单独静默退出。
 - CI 仅 Windows，Python 3.12/3.14，固定 action 提交及 uv 版本，运行 lint、format、mypy、pytest、build；3.12 另运行原 Go 对拍再生成检查。
 
 校内验收按 [campus-validation.md](campus-validation.md)，用户在本机输入凭据。未收到明确真实网络操作要求时，agent 继续使用本机假服务器。

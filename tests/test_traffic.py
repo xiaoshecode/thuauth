@@ -7,6 +7,7 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from email.utils import format_datetime
 from time import monotonic
+from urllib.parse import urlsplit
 
 import aiohttp
 import pytest
@@ -770,3 +771,130 @@ async def test_probe_429_prevents_second_stack_request(http_server, sessions):
         assert runner.snapshot()["probe"]["ipv6"]["requests"] == 0
     finally:
         await cancel(task)
+
+
+@pytest.mark.asyncio
+async def test_same_url_dns_failure_does_not_interrupt_other_stack(http_server):
+    class Resolver(aiohttp.abc.AbstractResolver):
+        async def resolve(self, host, port=0, family=socket.AF_INET):
+            if family == socket.AF_INET:
+                raise socket.gaierror(socket.EAI_NONAME, "synthetic v4 DNS failure")
+            return [
+                {
+                    "hostname": host,
+                    "host": "::1",
+                    "port": port,
+                    "family": family,
+                    "proto": 0,
+                    "flags": 0,
+                }
+            ]
+
+        async def close(self):
+            pass
+
+    async def handler(request):
+        return web.Response(body=b"x" * 512)
+
+    server = web.Application()
+    server.router.add_get("/", handler)
+    base = await http_server(server, family=socket.AF_INET6)
+    url = f"http://synthetic-target.test:{urlsplit(base).port}/"
+    config = replace(
+        configuration(
+            url,
+            workers_ipv6=1,
+            download_mib_per_minute=256 * 60 / 1024**2,
+            targets=(Target(url, "ipv4"), Target(url, "ipv6")),
+        ),
+        auth=AuthConfig(),
+    )
+    async with (
+        aiohttp.ClientSession(
+            connector=aiohttp.TCPConnector(family=socket.AF_INET, resolver=Resolver()),
+            trust_env=False,
+        ) as v4,
+        aiohttp.ClientSession(
+            connector=aiohttp.TCPConnector(family=socket.AF_INET6, resolver=Resolver()),
+            trust_env=False,
+        ) as v6,
+    ):
+        runner = TrafficRunner(config, {"ipv4": v4, "ipv6": v6}, lambda _: True)
+        download = asyncio.create_task(fetch_once(runner, "ipv6", 1))
+        try:
+            await until(lambda: runner.snapshot()["bulk"]["ipv6"]["bytes"] >= 128)
+            await fetch_once(runner, "ipv4", 0)
+            await asyncio.wait_for(download, 4)
+            stats = runner.snapshot()["bulk"]
+            assert stats["ipv4"]["last_result"] == "network_error"
+            assert stats["ipv6"]["successes"] == 1 and stats["ipv6"]["bytes"] == 512
+            runner.reset()
+            cooldown = runner.snapshot()["targets"]["bulk"][0]
+            assert cooldown["transport"]["ipv4"]["cooldown_seconds"] > 0
+            assert cooldown["transport"]["ipv6"]["failures"] == 0
+        finally:
+            if not download.done():
+                await cancel(download)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("chunk_size", [3, 128])
+async def test_html_with_leading_comments_is_not_bulk_progress(http_server, sessions, chunk_size):
+    async def handler(request):
+        return web.Response(
+            body=b"\xef\xbb\xbf <!-- portal notice -->\n<!-- another --> <html><form>login</form></html>",
+            content_type="application/octet-stream",
+        )
+
+    server = web.Application()
+    server.router.add_get("/", handler)
+    runner = TrafficRunner(
+        configuration(await http_server(server), chunk_bytes=chunk_size), sessions, lambda _: True
+    )
+    await fetch_once(runner)
+    stats = runner.snapshot()["bulk"]["ipv4"]
+    assert stats["successes"] == 0 and stats["last_result"] == "html"
+
+
+@pytest.mark.asyncio
+async def test_large_chunk_cannot_expand_stream_buffer_watermarks(
+    http_server, sessions, monkeypatch
+):
+    reads = []
+    original = aiohttp.StreamReader.read
+
+    async def measured(self, n=-1):
+        value = await original(self, n)
+        reads.append((n, self.get_read_buffer_limits()))
+        return value
+
+    monkeypatch.setattr(aiohttp.StreamReader, "read", measured)
+
+    async def handler(request):
+        return web.Response(body=b"x" * 131072)
+
+    server = web.Application()
+    server.router.add_get("/", handler)
+    runner = TrafficRunner(
+        configuration(await http_server(server), chunk_bytes=65536, max_response_bytes=131072),
+        sessions,
+        lambda _: True,
+    )
+    await fetch_once(runner)
+    assert runner.snapshot()["bulk"]["ipv4"]["bytes"] == 131072
+    assert reads and all(0 < n <= 16384 and high <= 32768 for n, (_, high) in reads)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cancelled", [False, True])
+async def test_dead_inner_worker_cannot_leave_traffic_running(sessions, monkeypatch, cancelled):
+    runner = TrafficRunner(configuration("http://127.0.0.1/"), sessions, lambda _: True)
+
+    async def stopped(family, worker):
+        if cancelled:
+            raise asyncio.CancelledError
+
+    monkeypatch.setattr(runner, "_bulk_loop", stopped)
+    with pytest.raises(ExceptionGroup):
+        await asyncio.wait_for(runner.run(), 0.2)
+    assert not runner._running

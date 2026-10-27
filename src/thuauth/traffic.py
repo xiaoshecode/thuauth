@@ -5,8 +5,8 @@ from __future__ import annotations
 import asyncio
 import math
 import re
-from collections.abc import Callable, Mapping
-from dataclasses import asdict, dataclass
+from collections.abc import Awaitable, Callable, Mapping
+from dataclasses import asdict, dataclass, field
 from datetime import UTC
 from email.utils import parsedate_to_datetime
 from ipaddress import ip_address
@@ -33,6 +33,13 @@ class _Stats:
 
 
 @dataclass
+class _TransportState:
+    failures: int = 0
+    until: float = 0.0
+    version: int = 0
+
+
+@dataclass
 class _TargetState:
     failures: int = 0
     until: float = 0.0
@@ -40,6 +47,23 @@ class _TargetState:
     next_request: float = 0.0
     paused: bool = False
     version: int = 0
+    transport: dict[IPFamily, _TransportState] = field(
+        default_factory=lambda: {"ipv4": _TransportState(), "ipv6": _TransportState()}
+    )
+
+
+def _looks_like_html(prefix: bytes) -> bool:
+    """Bounded sniffing, including BOM, whitespace and split leading comments."""
+    beginning = prefix.removeprefix(b"\xef\xbb\xbf").lstrip().lower()
+    while beginning.startswith(b"<!--"):
+        end = beginning.find(b"-->", 4)
+        if end < 0:
+            # Reject an overlong markup prefix rather than counting it as a file.
+            return len(prefix) >= 512
+        beginning = beginning[end + 3 :].lstrip()
+    return beginning.startswith(
+        (b"<!doctype html", b"<html", b"<head", b"<body", b"<form", b"<script")
+    )
 
 
 class TrafficRunner:
@@ -109,6 +133,14 @@ class TrafficRunner:
                     "failures": self._states[target.url].failures,
                     "paused": self._states[target.url].paused,
                     "cooldown_seconds": max(0.0, self._states[target.url].until - now),
+                    "transport": {
+                        family: {
+                            "failures": local.failures,
+                            "cooldown_seconds": max(0.0, local.until - now),
+                        }
+                        for family, local in self._states[target.url].transport.items()
+                        if family in self._families
+                    },
                 }
                 for index, target in enumerate(targets)
             ]
@@ -121,27 +153,48 @@ class TrafficRunner:
         result["burst_bytes"] = self._limiter.burst_bytes
         return result
 
+    async def _supervise(self, operation: Awaitable[None], stopping: asyncio.Event) -> None:
+        try:
+            await operation
+        except asyncio.CancelledError:
+            if not stopping.is_set():
+                raise RuntimeError("traffic worker cancelled unexpectedly") from None
+            raise
+        raise RuntimeError("traffic worker exited unexpectedly")
+
     async def run(self) -> None:
         if self._running:
             raise RuntimeError("traffic runner is already running")
         self._running = True
+        stopping = asyncio.Event()
         try:
             async with asyncio.TaskGroup() as group:
                 if self._config.probe.targets:
-                    group.create_task(self._probe_loop(), name="traffic-probe")
+                    group.create_task(
+                        self._supervise(self._probe_loop(), stopping), name="traffic-probe"
+                    )
                 if self._config.bulk.enabled and self._config.bulk.targets:
                     for family in self._families:
                         for worker in range(self._workers[family]):
                             group.create_task(
-                                self._bulk_loop(family, worker), name=f"traffic-{family}-{worker}"
+                                self._supervise(self._bulk_loop(family, worker), stopping),
+                                name=f"traffic-{family}-{worker}",
                             )
                 # Even an empty configuration is a long-lived daemon component.
-                await asyncio.Future[None]()
+                try:
+                    await asyncio.Future[None]()
+                finally:
+                    stopping.set()
         finally:
             self._running = False
 
-    def _cooling(self, state: _TargetState) -> bool:
-        return state.paused or state.until > self._clock()
+    def _cooling(self, state: _TargetState, family: IPFamily | None = None) -> bool:
+        now = self._clock()
+        return (
+            state.paused
+            or state.until > now
+            or (family is not None and state.transport[family].until > now)
+        )
 
     async def _probe_loop(self) -> None:
         targets = self._config.probe.targets
@@ -155,7 +208,10 @@ class TrafficRunner:
                     # An explicit server throttle still applies immediately to both.
                     if state.paused or state.throttled_until > self._clock():
                         break
-                    if target.family in (family, "both"):
+                    if (
+                        target.family in (family, "both")
+                        and state.transport[family].until <= self._clock()
+                    ):
                         await self._fetch(family, target, state, bulk=False)
             index = (index + 1) % len(targets)
             # Skip missed ticks; UNKNOWN retains this observation path.
@@ -174,7 +230,7 @@ class TrafficRunner:
                 chosen = (index + offset) % len(targets)
                 target = targets[chosen]
                 state = self._states[target.url]
-                if self._cooling(state) or state.next_request > self._clock():
+                if self._cooling(state, family) or state.next_request > self._clock():
                     continue
                 # Atomic on this event loop, before the first request await.
                 state.next_request = self._clock() + self._request_interval
@@ -228,6 +284,19 @@ class TrafficRunner:
         if status == 429:
             state.throttled_until = max(state.throttled_until, state.until)
 
+    def _transport_failure(
+        self, state: _TargetState, stats: _Stats, family: IPFamily, reason: str
+    ) -> None:
+        # DNS/routes/timeouts on one address family are not server-wide throttles.
+        stats.failures += 1
+        stats.last_result = reason
+        local = state.transport[family]
+        local.failures += 1
+        local.version += 1
+        local.until = max(
+            local.until, self._clock() + min(300.0, 5.0 * 2 ** min(6, local.failures - 1))
+        )
+
     @staticmethod
     def _range_length(response: aiohttp.ClientResponse, limit: int) -> int | None:
         match = re.fullmatch(
@@ -257,9 +326,10 @@ class TrafficRunner:
         except ValueError:
             literal = None
         if literal is not None and literal.version != (4 if family == "ipv4" else 6):
-            self._failure(state, stats, "network_error")
+            self._transport_failure(state, stats, family, "network_error")
             return
         version = state.version
+        transport_version = state.transport[family].version
         limit = (
             self._config.bulk.max_response_bytes if bulk else self._config.probe.max_response_bytes
         )
@@ -273,7 +343,7 @@ class TrafficRunner:
             total_timeout += 2 * limit * workers / self._limiter.rate
         session = self._sessions[family]
         if session.closed:
-            self._failure(state, stats, "session_unavailable")
+            self._transport_failure(state, stats, family, "session_unavailable")
             return
         try:
             async with asyncio.timeout(total_timeout):
@@ -334,13 +404,15 @@ class TrafficRunner:
                         # A concurrent success must not erase a newer server failure.
                         if version == state.version:
                             state.failures = 0
+                        if transport_version == state.transport[family].version:
+                            state.transport[family].failures = 0
                     elif outcome in ("offline", "cooling"):
                         stats.aborted += 1
                     else:
                         self._failure(state, stats, outcome)
         except (aiohttp.ClientError, OSError, TimeoutError):
             # Never stringify exceptions: aiohttp errors can contain secret URLs.
-            self._failure(state, stats, "network_error")
+            self._transport_failure(state, stats, family, "network_error")
 
     async def _read_body(
         self,
@@ -359,15 +431,16 @@ class TrafficRunner:
                 break
             if bulk and not self._is_online(family):
                 return "offline"
-            if bulk and self._cooling(state):
+            if bulk and self._cooling(state, family):
                 return "cooling"
-            amount = min(limit - received, self._limiter.burst_bytes if bulk else 16384)
+            # aiohttp raises its watermarks when read(n) exceeds the low watermark.
+            amount = min(limit - received, 16384, self._limiter.burst_bytes if bulk else 16384)
             generation = await self._limiter.acquire(amount) if bulk else 0
             used = 0
             try:
                 if bulk and not self._is_online(family):
                     return "offline"
-                if bulk and self._cooling(state):
+                if bulk and self._cooling(state, family):
                     return "cooling"
                 # aiohttp's sock_read timer is disabled: budget waiting is not I/O.
                 async with asyncio.timeout(self._read_timeout):
@@ -382,10 +455,7 @@ class TrafficRunner:
                 break
             if bulk:
                 prefix.extend(data[: max(0, 512 - len(prefix))])
-                beginning = bytes(prefix).lstrip(b"\xef\xbb\xbf \t\r\n").lower()
-                if beginning.startswith(
-                    (b"<!doctype html", b"<html", b"<head", b"<body", b"<form", b"<script")
-                ):
+                if _looks_like_html(bytes(prefix)):
                     return "html"
         if received == 0:
             return "empty" if bulk else "ok"
