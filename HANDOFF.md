@@ -81,4 +81,3 @@ M0–M4 的 Windows 代码、文档及 CI 配置已完成，本机最终全量�
 ## 2026-10-30 仓库维护复验
 
 新增 README 在线文档入口、维护记录及 EditorConfig；运行代码与参考快照不变。新克隆环境使用 Windows/Python 3.13.12，locked sync、ruff check、ruff format --check（43 文件）、mypy（17 文件）均退出 0；pytest 实测 **850 passed、1 skipped（POSIX 权限），26.06 秒**。详见 [维护记录](docs/maintenance-2026-10-30.md)。本轮未重新执行旧记录中的 Go 再生成、分发包构建或真实校园网操作；下一步仍为用户在校园网内按验收清单验证。
-
