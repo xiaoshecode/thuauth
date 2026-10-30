@@ -77,3 +77,7 @@ M0–M4 的 Windows 代码、文档及 CI 配置已完成，本机最终全量�
 完整实现提交为 `423f983`，最终评审修复为 `544d6b6f16d4231c37c1c10e41c73da687728036`。该最终代码的 [Windows CI 40438208804](https://github.com/xiaoshecode/thuauth/actions/runs/40438208804) 状态 success，两项作业与上述计数均从实际日志核对。
 
 本文件的最终结果补记不改代码、测试或工作流，因此作为单独文档提交，不重复运行 CI。工作分支 `codex/windows-complete` 与默认分支 `codex/bootstrap` 同步相同内容，均只快进、不强推；文档收尾提交号以 `git log -1` 为准。未创建发布标签或上传 GitHub Release；可安装 wheel/sdist 位于本机忽略目录 dist/，克隆后可用 uv build 重建。
+
+## 2026-10-30 仓库维护复验
+
+新增 README 在线文档入口、维护记录及 EditorConfig；运行代码与参考快照不变。新克隆环境使用 Windows/Python 3.13.12，locked sync、ruff check、ruff format --check（43 文件）、mypy（17 文件）均退出 0；pytest 实测 **850 passed、1 skipped（POSIX 权限），26.06 秒**。详见 [维护记录](docs/maintenance-2026-10-30.md)。本轮未重新执行旧记录中的 Go 再生成、分发包构建或真实校园网操作；下一步仍为用户在校园网内按验收清单验证。

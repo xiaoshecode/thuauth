@@ -1,5 +1,7 @@
 # thuauth
 
+[在线维护文档](https://xiaoshecode.github.io/xiaoshecode/repos/thuauth/) · [2026-10-30 检查记录](docs/maintenance-2026-10-30.md)
+
 使用 Codex 协作开发的个人清华校园网认证与保活工具，采用 Python 3.12+、asyncio 和 aiohttp，当前只交付 Windows。本机 JSON 保存学号密码，双栈分别检查、按需登录，默认自动重登，支持自选网站访问及可配置下载流量。
 
 **M0–M4 的工程、协议、认证、保活与交付代码已实现。** 本机假服务器验证不等于学校门户验证；实际检查结果见 [HANDOFF.md](HANDOFF.md)，待用户执行的步骤见 [校园网验收](docs/campus-validation.md)。
